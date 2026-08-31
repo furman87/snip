@@ -5,3 +5,6 @@
 :root[data-theme="light"] #preview .kw{color:#1d4ed8}
 :root[data-theme="light"] #preview .str{color:#15803d}
 :root[data-theme="light"] #preview .num{color:#a16207}
+.providers a{background:var(--field);border-color:var(--line);color:var(--ink)}
+.providers a:hover{background:color-mix(in srgb,var(--accent) 18%,var(--field));border-color:var(--accent);color:var(--ink)}
+:root[data-theme="light"] .providers a:hover{background:#eaf1ff;color:#172033}
