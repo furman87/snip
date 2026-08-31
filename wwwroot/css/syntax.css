@@ -1,0 +1,7 @@
+/* Token colors used by Snip's source preview. */
+#preview .kw{color:#93c5fd;font-weight:700}
+#preview .str{color:#86efac}
+#preview .num{color:#fbbf24}
+:root[data-theme="light"] #preview .kw{color:#1d4ed8}
+:root[data-theme="light"] #preview .str{color:#15803d}
+:root[data-theme="light"] #preview .num{color:#a16207}
