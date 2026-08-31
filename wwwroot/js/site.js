@@ -4,6 +4,11 @@ const themeKey='snip-theme';
 function applyTheme(theme){document.documentElement.dataset.theme=theme;localStorage.setItem(themeKey,theme);const button=$('#theme-toggle');if(button){button.textContent=theme==='dark'?'☀ Light':'☾ Dark';button.setAttribute('aria-label',`Switch to ${theme==='dark'?'light':'dark'} mode`)}}
 function mountThemeToggle(){const button=document.createElement('button');button.id='theme-toggle';button.className='plain theme-toggle';$('#logout').before(button);button.onclick=()=>applyTheme(document.documentElement.dataset.theme==='dark'?'light':'dark');applyTheme(localStorage.getItem(themeKey)||'dark')}
 mountThemeToggle();
+function setPreviewTab(name){document.querySelectorAll('#tabs button').forEach(button=>button.classList.toggle('active',button.dataset.tab===name))}
+function showHighlightedSource(renderer){state.view='preview';content.hidden=true;$('#preview').hidden=false;$('#preview').innerHTML=`<pre><code>${renderer(content.value)}</code></pre>`;$('#tabs').hidden=false;$('[data-tab="preview"]').textContent='Syntax preview';setPreviewTab('preview')}
+function autoPreviewDetectedContent(){if(state.image||!content.value.trim())return;if(isSql(content.value))return showHighlightedSource(sqlHighlight);if(isCSharp(content.value))return showHighlightedSource(csharpHighlight);const type=kind(content.value);if(['Markdown','JSON','XML','C#','Python','YAML'].includes(type))preview()}
+const resetEditor=reset;reset=()=>{resetEditor();setPreviewTab('source')};
+const openEditor=open;open=async id=>{await openEditor(id);autoPreviewDetectedContent()};
 const isSql=value=>/\b(select|insert|update|delete|create|alter|drop)\b[\s\S]*\b(from|into|table|set)\b/i.test(value||'');
 const isCSharp=value=>/\b(public|private|protected|internal)\s+(?:(?:override|virtual|static|async)\s+)*(?:void|int|string|bool|decimal|double|long|var|[A-Z][\w<>?,\[\]]*)\s+\w+\s*\(/.test(value||'');
 function sqlHighlight(value){return esc(value).replace(/("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')/g,'<span class="str">$1</span>').replace(/\b(\d+(?:\.\d+)?)\b/g,'<span class="num">$1</span>').replace(/\b(SELECT|FROM|WHERE|INSERT|INTO|VALUES|UPDATE|SET|DELETE|CREATE|ALTER|DROP|TABLE|JOIN|LEFT|RIGHT|INNER|ORDER|GROUP|BY|AS|AND|OR|NULL)\b/gi,'<span class="kw">$1</span>')}
