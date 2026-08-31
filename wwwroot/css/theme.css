@@ -1,0 +1,12 @@
+/* Blue-accent theme; dark mode is the default. */
+:root{color-scheme:dark;--accent:#3b82f6;--accent-hover:#2563eb;--ink:#e7edf8;--muted:#9aa9be;--line:#27364b;--bg:#0b1220;--panel:#111b2e;--field:#152139}
+:root[data-theme="light"]{color-scheme:light;--accent:#2563eb;--accent-hover:#1d4ed8;--ink:#172033;--muted:#64748b;--line:#d8e0ec;--bg:#f5f8fc;--panel:#fff;--field:#f1f5f9}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--ink)}
+header{background:var(--panel);border-color:var(--line)}.brand{color:var(--ink)}.brand:first-letter,.spark{color:var(--accent)}
+.search{background:var(--field);border-color:var(--line);color:var(--muted)}.search input{color:var(--ink)}select{background:var(--field);border-color:var(--line);color:var(--ink)}
+.primary{background:var(--accent)}.primary:hover{background:var(--accent-hover)}.plain{color:var(--muted)}.theme-toggle{border:1px solid var(--line);padding:8px 10px}.theme-toggle:hover{background:var(--field);color:var(--ink)}
+.card,.open,dialog,.login>div{background:var(--panel);border-color:var(--line);color:var(--ink)}.card{border-color:var(--line);box-shadow:none}.card:hover{box-shadow:0 8px 22px rgb(0 0 0/.22)}.card h2{color:var(--ink)}.type{background:color-mix(in srgb,var(--accent) 16%,transparent);color:#8db8ff}.excerpt{color:var(--muted)}.actions{border-color:var(--line)}.actions button{color:#8db8ff}
+.empty p,.login p,.meta,#saved{color:var(--muted)}#title,textarea{background:var(--panel);color:var(--ink);border-color:var(--line)}#tabs{border-color:var(--line)}#tabs .active{background:color-mix(in srgb,var(--accent) 17%,transparent);color:#8db8ff}#tabs button{color:var(--muted)}#preview{background:var(--panel);color:var(--ink)}#preview pre{background:#07101d;color:#e2e8f0}footer{background:var(--panel);border-color:var(--line)}#image-box{background:var(--panel)}
+:root[data-theme="light"] .type,:root[data-theme="light"] .actions button,:root[data-theme="light"] #tabs .active{color:var(--accent)}
+@media(max-width:680px){.theme-toggle{font-size:12px}}

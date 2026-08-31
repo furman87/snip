@@ -1,5 +1,10 @@
 const $=s=>document.querySelector(s),state={items:[],id:null,image:null,view:'source'},dialog=$('#editor'),content=$('#content');
-const api=async(url,opts)=>{const r=await fetch(url,opts);if(!r.ok){const b=await r.json().catch(()=>({}));throw Error(b.error||'Request failed.')}return r.status===204?null:r.json()};
+document.head.insertAdjacentHTML('beforeend','<link rel="stylesheet" href="/css/theme.css">');
+const themeKey='snip-theme';
+function applyTheme(theme){document.documentElement.dataset.theme=theme;localStorage.setItem(themeKey,theme);const button=$('#theme-toggle');if(button){button.textContent=theme==='dark'?'☀ Light':'☾ Dark';button.setAttribute('aria-label',`Switch to ${theme==='dark'?'light':'dark'} mode`)}}
+function mountThemeToggle(){const button=document.createElement('button');button.id='theme-toggle';button.className='plain theme-toggle';$('#logout').before(button);button.onclick=()=>applyTheme(document.documentElement.dataset.theme==='dark'?'light':'dark');applyTheme(localStorage.getItem(themeKey)||'dark')}
+mountThemeToggle();
+const api=async(url,opts)=>{const r=await fetch(url,opts);if(!r.ok){const b=await r.json().catch(()=>({}));throw Error(b.error||(r.status===413?'The image is too large. Images must be 10 MB or smaller.':`Request failed (${r.status}).`))}return r.status===204?null:r.json()};
 const esc=s=>(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const kind=t=>{t=(t||'').trim();if(/^#{1,6}\s|```|\*\*|\[[^\]]+\]\(/m.test(t))return'Markdown';if(/^[{[]/.test(t))return'JSON';if(/^\s*</.test(t))return'XML';if(/\b(using|namespace|public|private|class|async|Task)\b/.test(t))return'C#';if(/\b(def|import|from|print|None|self)\b/.test(t))return'Python';if(/^\s*[\w.-]+:\s+/m.test(t))return'YAML';return'Text'};
 let timer;$('#search').oninput=()=>{clearTimeout(timer);timer=setTimeout(load,180)};$('#sort').onchange=load;

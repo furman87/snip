@@ -16,18 +16,20 @@ builder.WebHost.ConfigureKestrel(o => o.Limits.MaxRequestBodySize = 15 * 1024 * 
 var auth = builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme).AddCookie(options =>
 {
     options.LoginPath = "/";
+    options.ExpireTimeSpan = TimeSpan.FromDays(30);
+    options.SlidingExpiration = true;
     options.Events.OnRedirectToLogin = context => { context.Response.StatusCode = StatusCodes.Status401Unauthorized; return Task.CompletedTask; };
 });
 var providers = new List<string>();
-if (Configured("Google")) { auth.AddGoogle("Google", o => { o.ClientId = config["Authentication:Google:ClientId"]!; o.ClientSecret = config["Authentication:Google:ClientSecret"]!; o.Events.OnCreatingTicket = c => { c.Identity?.AddClaim(new Claim("snip_provider", "Google")); return Task.CompletedTask; }; }); providers.Add("Google"); }
+if (Configured("Google")) { auth.AddGoogle("Google", o => { o.ClientId = config["Authentication:Google:ClientId"]!; o.ClientSecret = config["Authentication:Google:ClientSecret"]!; o.Events.OnCreatingTicket = c => { c.Identity?.AddClaim(new Claim("snip_provider", "Google")); return Task.CompletedTask; }; o.Events.OnTicketReceived = PersistTicket; }); providers.Add("Google"); }
 if (Configured("GitHub")) { auth.AddOAuth("GitHub", o =>
 {
     o.ClientId = config["Authentication:GitHub:ClientId"]!; o.ClientSecret = config["Authentication:GitHub:ClientSecret"]!; o.CallbackPath = "/signin-github";
     o.AuthorizationEndpoint = "https://github.com/login/oauth/authorize"; o.TokenEndpoint = "https://github.com/login/oauth/access_token"; o.UserInformationEndpoint = "https://api.github.com/user"; o.Scope.Add("read:user");
     o.ClaimActions.MapJsonKey(ClaimTypes.NameIdentifier, "id"); o.ClaimActions.MapJsonKey(ClaimTypes.Name, "login");
-    o.Events = new OAuthEvents { OnCreatingTicket = async c => { using var request = new HttpRequestMessage(HttpMethod.Get, c.Options.UserInformationEndpoint); request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", c.AccessToken); request.Headers.UserAgent.ParseAdd("SnipScratchpad"); using var response = await c.Backchannel.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, c.HttpContext.RequestAborted); response.EnsureSuccessStatusCode(); using var user = System.Text.Json.JsonDocument.Parse(await response.Content.ReadAsStringAsync(c.HttpContext.RequestAborted)); c.RunClaimActions(user.RootElement); c.Identity?.AddClaim(new Claim("snip_provider", "GitHub")); } };
+    o.Events = new OAuthEvents { OnCreatingTicket = async c => { using var request = new HttpRequestMessage(HttpMethod.Get, c.Options.UserInformationEndpoint); request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", c.AccessToken); request.Headers.UserAgent.ParseAdd("SnipScratchpad"); using var response = await c.Backchannel.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, c.HttpContext.RequestAborted); response.EnsureSuccessStatusCode(); using var user = System.Text.Json.JsonDocument.Parse(await response.Content.ReadAsStringAsync(c.HttpContext.RequestAborted)); c.RunClaimActions(user.RootElement); c.Identity?.AddClaim(new Claim("snip_provider", "GitHub")); }, OnTicketReceived = PersistTicket };
 }); providers.Add("GitHub"); }
-if (Configured("Microsoft")) { auth.AddMicrosoftAccount("Microsoft", o => { o.ClientId = config["Authentication:Microsoft:ClientId"]!; o.ClientSecret = config["Authentication:Microsoft:ClientSecret"]!; o.Events.OnCreatingTicket = c => { c.Identity?.AddClaim(new Claim("snip_provider", "Microsoft")); return Task.CompletedTask; }; }); providers.Add("Microsoft"); }
+if (Configured("Microsoft")) { auth.AddMicrosoftAccount("Microsoft", o => { o.ClientId = config["Authentication:Microsoft:ClientId"]!; o.ClientSecret = config["Authentication:Microsoft:ClientSecret"]!; o.Events.OnCreatingTicket = c => { c.Identity?.AddClaim(new Claim("snip_provider", "Microsoft")); return Task.CompletedTask; }; o.Events.OnTicketReceived = PersistTicket; }); providers.Add("Microsoft"); }
 builder.Services.AddAuthorization();
 
 var app = builder.Build();
@@ -76,6 +78,7 @@ app.Run();
 
 bool Configured(string provider) => !string.IsNullOrWhiteSpace(config[$"Authentication:{provider}:ClientId"]) && !string.IsNullOrWhiteSpace(config[$"Authentication:{provider}:ClientSecret"]);
 static string OwnerId(ClaimsPrincipal user) => $"{user.FindFirstValue("snip_provider") ?? "external"}:{user.FindFirstValue(ClaimTypes.NameIdentifier) ?? throw new UnauthorizedAccessException()}";
+static Task PersistTicket(TicketReceivedContext context) { var properties = context.Properties ?? new AuthenticationProperties(); properties.IsPersistent = true; properties.ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30); context.Properties = properties; return Task.CompletedTask; }
 static string? Validate(SnippetInput x) => string.IsNullOrWhiteSpace(x.Title) || x.Title.Trim().Length > 200 ? "A title of 1–200 characters is required." : x.ImageData is { Length: > 10 * 1024 * 1024 } ? "Images must be 10 MB or smaller." : x.ImageData is not null && !string.IsNullOrWhiteSpace(x.Content) ? "A snip can contain either text or one image." : x.ImageData is null && x.Content is null ? "Add text or an image." : x.ImageData is not null && !(x.ImageContentType?.StartsWith("image/", StringComparison.OrdinalIgnoreCase) ?? false) ? "Only image uploads are supported." : null;
 record SnippetInput(string Title, string? Content, byte[]? ImageData, string? ImageContentType);
 record Snippet(Guid Id, string Title, string? Content, string? ImageContentType, DateTime CreatedAt, DateTime UpdatedAt);
