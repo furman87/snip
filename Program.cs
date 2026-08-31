@@ -3,6 +3,7 @@ using Dapper;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OAuth;
+using Microsoft.AspNetCore.HttpOverrides;
 using Npgsql;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -30,6 +31,14 @@ if (Configured("Microsoft")) { auth.AddMicrosoftAccount("Microsoft", o => { o.Cl
 builder.Services.AddAuthorization();
 
 var app = builder.Build();
+var forwardedHeaders = new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedHost
+};
+// The container listens only on loopback through nginx in production.
+forwardedHeaders.KnownIPNetworks.Clear();
+forwardedHeaders.KnownProxies.Clear();
+app.UseForwardedHeaders(forwardedHeaders);
 app.UseDefaultFiles();
 app.UseStaticFiles(new StaticFileOptions
 {

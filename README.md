@@ -34,9 +34,9 @@ For local development, replace `https://snip.fu87.app` with `http://localhost:80
 Prerequisites: Docker/Compose, nginx, and certbot are installed; DNS for `snip.fu87.app` points at the server; firewall ports 80 and 443 are open.
 
 ```bash
-sudo mkdir -p /opt/snip
-sudo chown "$USER":"$USER" /opt/snip
-# Copy or clone this project into /opt/snip, then:
+sudo mkdir -p /opt
+sudo chown "$USER":"$USER" /opt
+git clone https://github.com/YOUR-GITHUB-USERNAME/YOUR-SNIP-REPOSITORY.git /opt/snip
 cd /opt/snip
 cp .env.example .env
 chmod 600 .env
@@ -60,6 +60,7 @@ Certbot updates nginx to serve TLS and redirect HTTP automatically. The app is d
 
 ```bash
 cd /opt/snip
+git pull
 docker compose up -d --build
 
 # Save the database somewhere outside this server regularly.
