@@ -10,6 +10,7 @@ var builder = WebApplication.CreateBuilder(args);
 var config = builder.Configuration;
 var connectionString = config.GetConnectionString("Postgres") ?? config["ConnectionStrings__Postgres"] ?? throw new InvalidOperationException("A Postgres connection string is required.");
 builder.Services.AddSingleton(new NpgsqlDataSourceBuilder(connectionString).Build());
+builder.Services.AddSingleton<LiveSnipNotifier>();
 builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase);
 builder.WebHost.ConfigureKestrel(o => o.Limits.MaxRequestBodySize = 15 * 1024 * 1024);
 
@@ -60,6 +61,26 @@ app.MapGet("/api/auth/providers", () => Results.Ok(providers)).AllowAnonymous();
 app.MapGet("/login/{provider}", (string provider) => providers.Contains(provider, StringComparer.OrdinalIgnoreCase) ? Results.Challenge(new AuthenticationProperties { RedirectUri = "/" }, [providers.Single(p => p.Equals(provider, StringComparison.OrdinalIgnoreCase))]) : Results.NotFound()).AllowAnonymous();
 app.MapPost("/api/auth/logout", () => Results.SignOut(new AuthenticationProperties { RedirectUri = "/" }, [CookieAuthenticationDefaults.AuthenticationScheme]));
 app.MapGet("/api/auth/me", (ClaimsPrincipal user) => Results.Ok(new { name = user.Identity?.Name ?? "Signed in" })).RequireAuthorization();
+app.MapGet("/api/live", async (HttpContext context, LiveSnipNotifier notifier, ClaimsPrincipal user) =>
+{
+    var ownerId = OwnerId(user);
+    var (id, reader) = notifier.Subscribe(ownerId);
+    context.Response.Headers.CacheControl = "no-cache";
+    context.Response.Headers.Append("X-Accel-Buffering", "no");
+    context.Response.ContentType = "text/event-stream";
+    try
+    {
+        await context.Response.WriteAsync("event: connected\ndata: ready\n\n", context.RequestAborted);
+        await context.Response.Body.FlushAsync(context.RequestAborted);
+        await foreach (var _ in reader.ReadAllAsync(context.RequestAborted))
+        {
+            await context.Response.WriteAsync("event: snippets-changed\ndata: updated\n\n", context.RequestAborted);
+            await context.Response.Body.FlushAsync(context.RequestAborted);
+        }
+    }
+    catch (OperationCanceledException) { }
+    finally { notifier.Unsubscribe(ownerId, id); }
+}).RequireAuthorization();
 
 var snippets = app.MapGroup("/api/snippets").RequireAuthorization();
 snippets.MapGet("", async (NpgsqlDataSource source, ClaimsPrincipal user, string? search, string? sort) =>
@@ -71,9 +92,9 @@ snippets.MapGet("", async (NpgsqlDataSource source, ClaimsPrincipal user, string
 });
 snippets.MapGet("/{id:guid}", async (NpgsqlDataSource source, ClaimsPrincipal user, Guid id) => { await using var c = await source.OpenConnectionAsync(); var item = await c.QuerySingleOrDefaultAsync<Snippet>("SELECT id AS \"Id\", title AS \"Title\", content AS \"Content\", image_content_type AS \"ImageContentType\", created_at AS \"CreatedAt\", updated_at AS \"UpdatedAt\" FROM snippets WHERE id=@id AND owner_id=@ownerId", new { id, ownerId = OwnerId(user) }); return item is null ? Results.NotFound() : Results.Ok(item); });
 snippets.MapGet("/{id:guid}/image", async (NpgsqlDataSource source, ClaimsPrincipal user, Guid id) => { await using var c = await source.OpenConnectionAsync(); var image = await c.QuerySingleOrDefaultAsync<ImagePayload>("SELECT image_data AS \"Data\", image_content_type AS \"ContentType\" FROM snippets WHERE id=@id AND owner_id=@ownerId", new { id, ownerId = OwnerId(user) }); return image?.Data is null ? Results.NotFound() : Results.File(image.Data, image.ContentType ?? "application/octet-stream"); });
-snippets.MapPost("", async (NpgsqlDataSource source, ClaimsPrincipal user, SnippetInput input) => { if (Validate(input) is { } error) return Results.BadRequest(new { error }); var id = Guid.NewGuid(); await using var c = await source.OpenConnectionAsync(); await c.ExecuteAsync("INSERT INTO snippets (id,owner_id,title,content,image_data,image_content_type) VALUES (@id,@ownerId,@title,@content,@imageData,@imageContentType)", new { id, ownerId = OwnerId(user), title = input.Title.Trim(), input.Content, input.ImageData, input.ImageContentType }); return Results.Created($"/api/snippets/{id}", new { id }); });
-snippets.MapPut("/{id:guid}", async (NpgsqlDataSource source, ClaimsPrincipal user, Guid id, SnippetInput input) => { if (Validate(input) is { } error) return Results.BadRequest(new { error }); await using var c = await source.OpenConnectionAsync(); var rows = await c.ExecuteAsync("UPDATE snippets SET title=@title,content=@content,image_data=@imageData,image_content_type=@imageContentType,updated_at=now() WHERE id=@id AND owner_id=@ownerId", new { id, ownerId = OwnerId(user), title = input.Title.Trim(), input.Content, input.ImageData, input.ImageContentType }); return rows == 0 ? Results.NotFound() : Results.NoContent(); });
-snippets.MapDelete("/{id:guid}", async (NpgsqlDataSource source, ClaimsPrincipal user, Guid id) => { await using var c = await source.OpenConnectionAsync(); return await c.ExecuteAsync("DELETE FROM snippets WHERE id=@id AND owner_id=@ownerId", new { id, ownerId = OwnerId(user) }) == 0 ? Results.NotFound() : Results.NoContent(); });
+snippets.MapPost("", async (NpgsqlDataSource source, LiveSnipNotifier notifier, ClaimsPrincipal user, SnippetInput input) => { if (Validate(input) is { } error) return Results.BadRequest(new { error }); var id = Guid.NewGuid(); var ownerId = OwnerId(user); await using var c = await source.OpenConnectionAsync(); await c.ExecuteAsync("INSERT INTO snippets (id,owner_id,title,content,image_data,image_content_type) VALUES (@id,@ownerId,@title,@content,@imageData,@imageContentType)", new { id, ownerId, title = input.Title.Trim(), input.Content, input.ImageData, input.ImageContentType }); notifier.Publish(ownerId); return Results.Created($"/api/snippets/{id}", new { id }); });
+snippets.MapPut("/{id:guid}", async (NpgsqlDataSource source, LiveSnipNotifier notifier, ClaimsPrincipal user, Guid id, SnippetInput input) => { if (Validate(input) is { } error) return Results.BadRequest(new { error }); var ownerId = OwnerId(user); await using var c = await source.OpenConnectionAsync(); var rows = await c.ExecuteAsync("UPDATE snippets SET title=@title,content=@content,image_data=@imageData,image_content_type=@imageContentType,updated_at=now() WHERE id=@id AND owner_id=@ownerId", new { id, ownerId, title = input.Title.Trim(), input.Content, input.ImageData, input.ImageContentType }); if (rows == 0) return Results.NotFound(); notifier.Publish(ownerId); return Results.NoContent(); });
+snippets.MapDelete("/{id:guid}", async (NpgsqlDataSource source, LiveSnipNotifier notifier, ClaimsPrincipal user, Guid id) => { var ownerId = OwnerId(user); await using var c = await source.OpenConnectionAsync(); var rows = await c.ExecuteAsync("DELETE FROM snippets WHERE id=@id AND owner_id=@ownerId", new { id, ownerId }); if (rows == 0) return Results.NotFound(); notifier.Publish(ownerId); return Results.NoContent(); });
 app.Run();
 
 bool Configured(string provider) => !string.IsNullOrWhiteSpace(config[$"Authentication:{provider}:ClientId"]) && !string.IsNullOrWhiteSpace(config[$"Authentication:{provider}:ClientSecret"]);
