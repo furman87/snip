@@ -3,6 +3,7 @@ using Dapper;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OAuth;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Npgsql;
 
@@ -11,6 +12,9 @@ var config = builder.Configuration;
 var connectionString = config.GetConnectionString("Postgres") ?? config["ConnectionStrings__Postgres"] ?? throw new InvalidOperationException("A Postgres connection string is required.");
 builder.Services.AddSingleton(new NpgsqlDataSourceBuilder(connectionString).Build());
 builder.Services.AddSingleton<LiveSnipNotifier>();
+builder.Services.AddDataProtection()
+    .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(builder.Environment.ContentRootPath, "data-protection-keys")))
+    .SetApplicationName("Snip");
 builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase);
 builder.WebHost.ConfigureKestrel(o => o.Limits.MaxRequestBodySize = 15 * 1024 * 1024);
 
@@ -19,6 +23,8 @@ var auth = builder.Services.AddAuthentication(CookieAuthenticationDefaults.Authe
     options.LoginPath = "/";
     options.ExpireTimeSpan = TimeSpan.FromDays(30);
     options.SlidingExpiration = true;
+    options.Cookie.MaxAge = TimeSpan.FromDays(30);
+    options.Events.OnSigningIn = PersistCookie;
     options.Events.OnRedirectToLogin = context => { context.Response.StatusCode = StatusCodes.Status401Unauthorized; return Task.CompletedTask; };
 });
 var providers = new List<string>();
@@ -100,6 +106,7 @@ app.Run();
 bool Configured(string provider) => !string.IsNullOrWhiteSpace(config[$"Authentication:{provider}:ClientId"]) && !string.IsNullOrWhiteSpace(config[$"Authentication:{provider}:ClientSecret"]);
 static string OwnerId(ClaimsPrincipal user) => $"{user.FindFirstValue("snip_provider") ?? "external"}:{user.FindFirstValue(ClaimTypes.NameIdentifier) ?? throw new UnauthorizedAccessException()}";
 static Task PersistTicket(TicketReceivedContext context) { var properties = context.Properties ?? new AuthenticationProperties(); properties.IsPersistent = true; properties.ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30); context.Properties = properties; return Task.CompletedTask; }
+static Task PersistCookie(CookieSigningInContext context) { context.Properties.IsPersistent = true; context.Properties.ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30); return Task.CompletedTask; }
 static string? Validate(SnippetInput x) => string.IsNullOrWhiteSpace(x.Title) || x.Title.Trim().Length > 200 ? "A title of 1–200 characters is required." : x.ImageData is { Length: > 10 * 1024 * 1024 } ? "Images must be 10 MB or smaller." : x.ImageData is not null && !string.IsNullOrWhiteSpace(x.Content) ? "A snip can contain either text or one image." : x.ImageData is null && x.Content is null ? "Add text or an image." : x.ImageData is not null && !(x.ImageContentType?.StartsWith("image/", StringComparison.OrdinalIgnoreCase) ?? false) ? "Only image uploads are supported." : null;
 record SnippetInput(string Title, string? Content, byte[]? ImageData, string? ImageContentType);
 record Snippet(Guid Id, string Title, string? Content, string? ImageContentType, DateTime CreatedAt, DateTime UpdatedAt);

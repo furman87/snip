@@ -16,6 +16,8 @@ services:
         condition: service_healthy
     ports:
       - "127.0.0.1:8088:8080"
+    volumes:
+      - data_protection_keys:/app/data-protection-keys
   db:
     image: postgres:17-alpine
     restart: unless-stopped
@@ -32,3 +34,4 @@ services:
       retries: 10
 volumes:
   postgres_data:
+  data_protection_keys:
