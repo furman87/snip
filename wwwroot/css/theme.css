@@ -15,5 +15,5 @@ header{background:var(--panel);border-color:var(--line)}.brand{color:var(--ink)}
 
 /* Branding and typography */
 body,button,select,input,textarea{font-family:Helvetica,Arial,sans-serif}
-.brand{display:flex;align-items:center;gap:8px;font-family:Helvetica,Arial,sans-serif;font-weight:700;letter-spacing:-.04em}.logo{width:29px;height:29px;color:var(--accent);fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;flex:none}.brand-period{color:var(--accent)}
+.brand{display:flex;align-items:center;gap:4px;font-family:Helvetica,Arial,sans-serif;font-weight:700;letter-spacing:-.04em}.logo{width:29px;height:29px;color:var(--accent);fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;flex:none}.brand-period{color:var(--accent)}
 .login .logo{width:43px;height:43px}.login h1,.empty h1,.modal-head h2,#preview h1,#preview h2,#preview h3{font-family:Helvetica,Arial,sans-serif}
